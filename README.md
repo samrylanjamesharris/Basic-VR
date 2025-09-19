@@ -4,3 +4,4 @@ The UniformArch is an LLM architecture designed to look at the whole context of 
 The LLM being developed on top of UniformArch will have a small amount of parameters, aiming for 5M parameters allowing the architecture to work and allow it's full power to be on a small amount of infomation.
 
 ## Sketch:
+The way it would work is by using, ``
