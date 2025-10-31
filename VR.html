@@ -296,4 +296,122 @@
                                 }
                             }
                             
-                            if (closestO
+                            if (closestObject) {
+                                closestObject.userData.isGrabbed = true;
+                                closestObject.userData.grabOffset = controllerPosition.clone().sub(closestObject.position);
+                            }
+                        });
+                        
+                        controller.addEventListener('selectend', function () {
+                            // Release grabbed objects
+                            for (const obj of gameObjects) {
+                                if (obj.userData.isGrabbed) {
+                                    obj.userData.isGrabbed = false;
+                                    obj.userData.velocity.copy(controller.userData.velocity || new THREE.Vector3());
+                                    
+                                    // Check if object hits the target
+                                    if (obj.position.distanceTo(target.position) < 2) {
+                                        score += 10;
+                                        document.getElementById('score').textContent = score;
+                                        createGameObject();
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                controller.addEventListener('disconnected', function () {
+                    // Remove the hand mesh when controller is disconnected
+                    for (let i = 0; i < handMeshes.length; i++) {
+                        if (handMeshes[i].controller === controller) {
+                            scene.remove(handMeshes[i].mesh);
+                            handMeshes.splice(i, 1);
+                            break;
+                        }
+                    }
+                });
+            }
+            
+            // Add controllers
+            const controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('connected', (e) => {
+                if (e.data.hand) {
+                    const handMesh = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.05, 0.1, 0.05),
+                        new THREE.MeshBasicMaterial({ color: 0x00aaff, wireframe: true })
+                    );
+                    handMesh.visible = true;
+                    controller1.add(handMesh);
+                }
+            });
+            scene.add(controller1);
+            
+            const controller2 = renderer.xr.getController(1);
+            controller2.addEventListener('connected', (e) => {
+                if (e.data.hand) {
+                    const handMesh = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.05, 0.1, 0.05),
+                        new THREE.MeshBasicMaterial({ color: 0x00aaff, wireframe: true })
+                    );
+                    handMesh.visible = true;
+                    controller2.add(handMesh);
+                }
+            });
+            scene.add(controller2);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            
+            // Update grabbed objects
+            for (const obj of gameObjects) {
+                if (obj.userData.isGrabbed) {
+                    // Object follows controller
+                    const controller = obj.userData.controller;
+                    if (controller) {
+                        obj.position.copy(controller.position).sub(obj.userData.grabOffset);
+                        obj.quaternion.copy(controller.quaternion);
+                    }
+                } else {
+                    // Apply gravity and physics to released objects
+                    obj.userData.velocity.y -= 9.8 * delta; // gravity
+                    obj.position.add(obj.userData.velocity.clone().multiplyScalar(delta));
+                    
+                    // Bounce off the floor
+                    if (obj.position.y < -0.35) {
+                        obj.position.y = -0.35;
+                        obj.userData.velocity.y *= -0.7; // bounce
+                    }
+                    
+                    // Slow down velocity
+                    obj.userData.velocity.multiplyScalar(0.99);
+                }
+            }
+            
+            // Update hand meshes
+            for (const hand of handMeshes) {
+                if (hand.controller.joints) {
+                    // Update hand mesh based on joint positions
+                    // In a real implementation, you would use the joint data to create a more detailed hand
+                    hand.mesh.position.copy(hand.controller.position);
+                    hand.mesh.quaternion.copy(hand.controller.quaternion);
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start everything
+        init();
+    </script>
+</body>
+</html>
