@@ -1,245 +1,116 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WebXR VR — Hands Pickup Game</title>
-  <style>
-    html,body{height:100%;margin:0;overflow:hidden;background:#111}
-    #ui{position:fixed;left:12px;top:12px;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial;font-weight:600;z-index:10}
-    #hint{font-size:13px;opacity:.9}
-    #score{font-size:18px;margin-top:6px}
-    canvas{display:block}
-  </style>
+    <meta charset="utf-8">
+    <title>VR Cube Catcher</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/handy-work@3.1.1/build/handy-controls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/handy-work@3.1.1/build/magnet-helpers.min.js"></script>
+    <style>
+        .score {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            z-index: 10;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 15px;
+            border-radius: 10px;
+        }
+    </style>
 </head>
 <body>
-<div id="ui"><div id="hint">Put on a WebXR headset (Chrome/Edge) and click "Enter VR"</div><div id="score">Score: <span id="scoreVal">0</span></div></div>
+    <div class="score">Score: <span id="score">0</span></div>
+    
+    <a-scene 
+        vr-mode-ui="enabled: false"
+        renderer="antialias: true; colorManagement: true; sortObjects: true"
+        physics="debug: false; gravity: -9.8"
+        handy-controls="materialOverride: false"
+        cursor="rayOrigin: mouse"
+        raycaster="objects: .cube">
+        
+        <!-- Camera with hands -->
+        <a-entity id="cameraRig" position="0 1.6 0">
+            <a-camera></a-camera>
+            <a-entity handy-controls="materialOverride: false" 
+                      handy-cursor="maxDistance: 10; objects: .cube"></a-entity>
+        </a-entity>
 
-<script type="module">
-import * as THREE from 'https://unpkg.com/three@0.152.0/build/three.module.js';
-import { VRButton } from 'https://unpkg.com/three@0.152.0/examples/jsm/webxr/VRButton.js';
-import { XRControllerModelFactory } from 'https://unpkg.com/three@0.152.0/examples/jsm/webxr/XRControllerModelFactory.js';
-import { XRHandModelFactory } from 'https://unpkg.com/three@0.152.0/examples/jsm/webxr/XRHandModelFactory.js';
+        <!-- Environment -->
+        <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" 
+                 color="#4CC3D9" static-body></a-plane>
+        <a-sky color="#ECE9E6"></a-sky>
 
-let camera, scene, renderer;
-let controller1, controller2, controllerGrip1, controllerGrip2;
-let hand1, hand2, handModelFactory;
-const orbs = [];
-let score = 0;
-const scoreEl = document.getElementById('scoreVal');
+        <!-- Lighting -->
+        <a-entity light="type: ambient; color: #fff; intensity: 0.8"></a-entity>
+        <a-entity light="type: directional; color: #fff; intensity: 0.6" 
+                  position="0 10 0"></a-entity>
+    </a-scene>
 
-init();
-animate();
-
-function init(){
-  // Renderer
-  renderer = new THREE.WebGLRenderer({ antialias:true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.xr.enabled = true;
-  document.body.appendChild(renderer.domElement);
-  document.body.appendChild(VRButton.createButton(renderer));
-
-  // Scene + Camera
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x20232a);
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
-  camera.position.set(0,1.6,3);
-
-  // Lights
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444455, 1.2);
-  hemi.position.set(0,20,0);
-  scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-  dir.position.set(5,10,2);
-  scene.add(dir);
-
-  // Floor
-  const floorGeo = new THREE.PlaneGeometry(20,20);
-  const floorMat = new THREE.MeshStandardMaterial({color:0x0f0f12,metalness:0.1,roughness:0.9});
-  const floor = new THREE.Mesh(floorGeo,floorMat);
-  floor.rotation.x = -Math.PI/2;
-  floor.position.y = 0;
-  scene.add(floor);
-
-  // Simple environment: a ring of posts
-  const postGeo = new THREE.CylinderGeometry(0.05,0.05,1.4,12);
-  const postMat = new THREE.MeshStandardMaterial({color:0x283046});
-  for(let i=0;i<8;i++){
-    const a = i/8*Math.PI*2;
-    const p = new THREE.Mesh(postGeo,postMat);
-    p.position.set(Math.cos(a)*3,0.7,Math.sin(a)*3);
-    scene.add(p);
-  }
-
-  // Controllers (fallback) and controller models
-  const controllerModelFactory = new XRControllerModelFactory();
-
-  controller1 = renderer.xr.getController(0);
-  controller1.addEventListener('selectstart', ()=>{});
-  controller1.addEventListener('selectend', ()=>{});
-  scene.add(controller1);
-
-  controllerGrip1 = renderer.xr.getControllerGrip(0);
-  controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-  scene.add(controllerGrip1);
-
-  controller2 = renderer.xr.getController(1);
-  scene.add(controller2);
-  controllerGrip2 = renderer.xr.getControllerGrip(1);
-  controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
-  scene.add(controllerGrip2);
-
-  // Hands
-  handModelFactory = new XRHandModelFactory();
-
-  hand1 = renderer.xr.getHand(0);
-  const handMesh1 = handModelFactory.createHandModel(hand1, 'mesh');
-  hand1.add(handMesh1);
-  scene.add(hand1);
-
-  hand2 = renderer.xr.getHand(1);
-  const handMesh2 = handModelFactory.createHandModel(hand2, 'mesh');
-  hand2.add(handMesh2);
-  scene.add(hand2);
-
-  // Visual helper spheres to represent fingertip/pinch point
-  const tipGeo = new THREE.SphereGeometry(0.03, 8, 8);
-  const tipMat = new THREE.MeshStandardMaterial({emissive:0x00ff66,emissiveIntensity:0.9,metalness:0.2,roughness:0.7});
-  hand1.userData.tip = new THREE.Mesh(tipGeo, tipMat);
-  hand1.userData.tip.visible = false;
-  scene.add(hand1.userData.tip);
-  hand2.userData.tip = new THREE.Mesh(tipGeo.clone(), tipMat.clone());
-  hand2.userData.tip.visible = false;
-  scene.add(hand2.userData.tip);
-
-  // Spawn orbs
-  for(let i=0;i<12;i++) spawnOrb();
-
-  window.addEventListener('resize', onWindowResize);
-}
-
-function spawnOrb(){
-  const g = new THREE.SphereGeometry(0.12, 16, 16);
-  const m = new THREE.MeshStandardMaterial({color: new THREE.Color(Math.random()*0.6+0.2, Math.random()*0.6+0.2, Math.random()*0.6+0.2), emissive: 0xffffff, emissiveIntensity: 0.05, metalness:0.5, roughness:0.3});
-  const orb = new THREE.Mesh(g,m);
-  orb.position.set((Math.random()-0.5)*4, 0.8 + Math.random()*1.4, (Math.random()-0.5)*4);
-  orb.userData.floatPhase = Math.random()*Math.PI*2;
-  orb.userData.collected = false;
-  scene.add(orb);
-  orbs.push(orb);
-}
-
-function onWindowResize(){
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-function animate(){
-  renderer.setAnimationLoop(render);
-}
-
-function getTipPosition(hand, indexName = 'index-finger-tip'){
-  // try to find the joint object created by the hand model
-  try{
-    const joint = hand.joints && hand.joints[indexName];
-    if(joint){
-      const pos = new THREE.Vector3();
-      joint.getWorldPosition(pos);
-      return pos;
-    }
-  }catch(e){}
-  // fallback: use hand's world position
-  const p = new THREE.Vector3();
-  hand.getWorldPosition(p);
-  return p;
-}
-
-function render(time){
-  const t = time * 0.001;
-  // animate orbs
-  for(let i=0;i<orbs.length;i++){
-    const orb = orbs[i];
-    orb.position.y += Math.sin(t + orb.userData.floatPhase) * 0.002;
-    orb.rotation.y += 0.01 + (i%3)*0.002;
-    // simple pulsing emissive when near
-    orb.material.emissiveIntensity = 0.05 + Math.abs(Math.sin(t*2 + orb.userData.floatPhase))*0.25;
-  }
-
-  // update tips (if hands available)
-  const hands = [hand1, hand2];
-  for(const h of hands){
-    if(h && h.visible){
-      const tipPos = getTipPosition(h);
-      h.userData.tip.visible = true;
-      h.userData.tip.position.copy(tipPos);
-
-      // collision test with orbs
-      for(let i=0;i<orbs.length;i++){
-        const orb = orbs[i];
-        if(orb.userData.collected) continue;
-        const d = orb.position.distanceTo(tipPos);
-        if(d < 0.18){
-          collectOrb(orb);
+    <script>
+        // Game variables
+        let score = 0;
+        const scoreElement = document.getElementById('score');
+        const scene = document.querySelector('a-scene');
+        const cameraRig = document.getElementById('cameraRig');
+        
+        // Create falling cubes
+        function createCube() {
+            const cube = document.createElement('a-box');
+            cube.classList.add('cube');
+            
+            // Random position above player
+            const x = (Math.random() - 0.5) * 8;
+            const z = (Math.random() - 0.5) * 8;
+            cube.setAttribute('position', {x: x, y: 5, z: z});
+            
+            // Physics properties
+            cube.setAttribute('dynamic-body', {
+                shape: 'box',
+                mass: 1
+            });
+            
+            // Visual properties
+            cube.setAttribute('color', '#FF5722');
+            cube.setAttribute('width', 0.3);
+            cube.setAttribute('height', 0.3);
+            cube.setAttribute('depth', 0.3);
+            
+            // Collision handling
+            cube.addEventListener('body-collide', (e) => {
+                if (e.detail.body.el.classList.contains('hand')) {
+                    // Remove cube and update score
+                    cube.parentNode.removeChild(cube);
+                    score++;
+                    scoreElement.textContent = score;
+                }
+            });
+            
+            scene.appendChild(cube);
+            
+            // Remove cubes that fall too low
+            setTimeout(() => {
+                if (cube.parentNode) {
+                    cube.parentNode.removeChild(cube);
+                }
+            }, 10000);
         }
-      }
-    } else {
-      if(h) h.userData.tip.visible = false;
-    }
-  }
-
-  // fallback: if no hands but controllers present, use controllers to interact
-  const ctrls = [controller1, controller2];
-  for(const c of ctrls){
-    if(c && c.visible){
-      const p = new THREE.Vector3();
-      c.getWorldPosition(p);
-      for(let i=0;i<orbs.length;i++){
-        const orb = orbs[i];
-        if(orb.userData.collected) continue;
-        if(orb.position.distanceTo(p) < 0.18) collectOrb(orb);
-      }
-    }
-  }
-
-  renderer.render(scene, camera);
-}
-
-function collectOrb(orb){
-  orb.userData.collected = true;
-  // play simple visual effect: scale up and fade then respawn
-  const startPos = orb.position.clone();
-  const startScale = orb.scale.clone();
-  const duration = 350;
-  const start = performance.now();
-  const origMat = orb.material;
-
-  (function animateCollect(){
-    const now = performance.now();
-    const p = (now - start)/duration;
-    if(p < 1){
-      orb.scale.setScalar(1 + p*1.5);
-      orb.material.emissiveIntensity = 1.0 - p;
-      requestAnimationFrame(animateCollect);
-    } else {
-      // remove and respawn elsewhere after short delay
-      scene.remove(orb);
-      const idx = orbs.indexOf(orb);
-      if(idx !== -1) orbs.splice(idx,1);
-      setTimeout(()=>{
-        spawnOrb();
-      }, 600);
-    }
-  })();
-
-  score += 1;
-  scoreEl.innerText = score;
-}
-
-</script>
-
-<!-- Notes: must be served from https or localhost. Works on devices with WebXR Hand Input or with controllers. -->
+        
+        // Spawn cubes every 1.5 seconds
+        setInterval(createCube, 1500);
+        
+        // Add hand meshes
+        document.querySelector('a-scene').addEventListener('loaded', () => {
+            const hands = document.querySelectorAll('[hand]');
+            hands.forEach(hand => {
+                hand.setAttribute('hand-model', 'color', hand.id === 'left' ? '#3498db' : '#e74c3c');
+                hand.classList.add('hand');
+            });
+        });
+    </script>
 </body>
 </html>
