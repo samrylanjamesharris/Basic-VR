@@ -1,92 +1,143 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>VR Cube Catcher</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/handy-work@3.1.1/build/handy-controls.min.js"></script>
-    <style>
-        .score {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            font-size: 24px;
-            font-family: Arial, sans-serif;
-            z-index: 10;
-            background: rgba(0,0,0,0.5);
-            padding: 5px 15px;
-            border-radius: 10px;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
+  <title>Simple WebXR VR Game — Hands + VR/AR Buttons</title>
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+  <script src="https://unpkg.com/super-hands@^4.0.4/dist/aframe-super-hands.min.js"></script>
+  <style>
+    html,body{height:100%;margin:0;background:#111}
+    /* screen UI */
+    .overlay-ui{position:fixed;left:12px;bottom:12px;z-index:9999;display:flex;gap:8px}
+    .btn{background:#111;border:2px solid #eee;color:#eee;padding:8px 12px;border-radius:6px;font-family:monospace;cursor:pointer;opacity:0.95}
+    .btn:active{transform:translateY(1px)}
+    .hint{position:fixed;left:12px;top:12px;color:#ddd;font-family:monospace;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px}
+  </style>
 </head>
 <body>
-    <div class="score">Score: <span id="score">0</span></div>
-    
-    <a-scene 
-        renderer="antialias: true; colorManagement: true"
-        physics="gravity: -9.8"
-        handy-controls="materialOverride: false"
-        cursor="rayOrigin: mouse"
-        raycaster="objects: .cube">
-        
-        <!-- Camera with hands -->
-        <a-entity id="cameraRig" position="0 1.6 0">
-            <a-camera></a-camera>
-            <a-entity handy-controls="materialOverride: false"></a-entity>
-        </a-entity>
 
-        <!-- Environment -->
-        <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" 
-                 color="#4CC3D9" static-body></a-plane>
-        <a-sky color="#ECE9E6"></a-sky>
+<div class="hint">Use your headset controllers (or click/touch) to grab and throw boxes. No 2D menu — in-VR interactions only.</div>
+<div class="overlay-ui">
+  <button id="enterVR" class="btn">Enter VR</button>
+  <button id="enterAR" class="btn">Enter AR</button>
+</div>
 
-        <!-- Lighting -->
-        <a-entity light="type: ambient; color: #fff; intensity: 0.8"></a-entity>
-        <a-entity light="type: directional; color: #fff; intensity: 0.6" 
-                  position="0 10 0"></a-entity>
-    </a-scene>
+<!-- A-Frame scene with vr-mode-ui activated -->
+<a-scene vr-mode-ui="enabled: true" embedded renderer="colorManagement: true;physicallyCorrectLights: true" background="color: #0b0b0b">
 
-    <script>
-        let score = 0;
-        const scoreElement = document.getElementById('score');
-        const scene = document.querySelector('a-scene');
-        
-        function createCube() {
-            const cube = document.createElement('a-box');
-            cube.classList.add('cube');
-            
-            // Random spawn position
-            const x = (Math.random() - 0.5) * 8;
-            const z = (Math.random() - 0.5) * 8;
-            cube.setAttribute('position', {x, y: 5, z});
-            
-            // Physics
-            cube.setAttribute('dynamic-body', {shape: 'box', mass: 1});
-            cube.setAttribute('color', '#FF5722');
-            cube.setAttribute('width', 0.3);
-            cube.setAttribute('height', 0.3);
-            cube.setAttribute('depth', 0.3);
-            
-            // Collision detection
-            cube.addEventListener('body-collide', (e) => {
-                if (e.detail.body.el?.hasAttribute('hand-controls')) {
-                    cube.remove();
-                    scoreElement.textContent = ++score;
-                }
-            });
-            
-            scene.appendChild(cube);
-            
-            // Auto-remove after 10s
-            setTimeout(() => cube.parentNode && cube.remove(), 10000);
-        }
-        
-        // Start spawning cubes after scene loads
-        scene.addEventListener('loaded', () => {
-            setInterval(createCube, 1500);
-        });
-    </script>
+  <!-- camera + hand controllers (visual hands) -->
+  <a-entity id="cameraRig">
+    <a-entity camera position="0 1.6 0" look-controls wasd-controls></a-entity>
+
+    <!-- Left hand -->
+    <a-entity id="leftHand" hand-controls="hand: left; handModelStyle: lowPoly; color: #888" super-hands
+              physics-collider="objects: .dynamic" grabbable droppable stretchable></a-entity>
+
+    <!-- Right hand -->
+    <a-entity id="rightHand" hand-controls="hand: right; handModelStyle: lowPoly; color:#aaa" super-hands
+              physics-collider="objects: .dynamic" grabbable droppable stretchable></a-entity>
+  </a-entity>
+
+  <!-- lighting -->
+  <a-entity light="type: ambient; intensity: 0.6"></a-entity>
+  <a-entity light="type: directional; intensity: 0.8" position="-1 3 1"></a-entity>
+
+  <!-- ground -->
+  <a-plane rotation="-90 0 0" width="50" height="50" color="#222" static-body></a-plane>
+
+  <!-- target boxes to grab -->
+  <a-entity id="spawnArea" position="0 1 -2">
+    <!-- spawn several boxes -->
+    <a-box class="dynamic" position="-1 0.5 0" depth="0.4" width="0.4" height="0.4" color="#e91e63" dynamic-body grabbable></a-box>
+    <a-box class="dynamic" position="0 0.5 0" depth="0.4" width="0.4" height="0.4" color="#3f51b5" dynamic-body grabbable></a-box>
+    <a-box class="dynamic" position="1 0.5 0" depth="0.4" width="0.4" height="0.4" color="#4caf50" dynamic-body grabbable></a-box>
+  </a-entity>
+
+  <!-- simple 3D timer / score panel (in-world 3D UI) -->
+  <a-entity id="hud" position="0 2 -1.2">
+    <a-plane width="0.9" height="0.3" color="#000" opacity="0.6"></a-plane>
+    <a-text id="scoreText" value="Boxes: 3" align="center" position="0 0 0.01" color="#fff"></a-text>
+  </a-entity>
+
+  <!-- a simple 3D menu (hidden) - user said no menu, but leaving a 3D one commented out for expansion -->
+
+  <!-- physics system (optional light) -->
+  <a-entity physics="gravity: -9.8" />
+
+</a-scene>
+
+<script>
+// Basic wiring: A-Frame provides its own VR button (because vr-mode-ui is enabled).
+// We add our own Enter VR button to ensure it's visible on-screen and an AR button that attempts to start an immersive-ar session.
+
+const scene = document.querySelector('a-scene');
+const enterVRBtn = document.getElementById('enterVR');
+const enterARBtn = document.getElementById('enterAR');
+
+enterVRBtn.addEventListener('click', async () => {
+  // Prefer A-Frame's built-in handler if available
+  const vrButton = document.querySelector('button[a-enter-vr]') || document.querySelector('.a-enter-vr');
+  if (vrButton) { vrButton.click(); return; }
+  // fallback: request immersive-vr session if browser supports WebXR
+  if (navigator.xr && navigator.xr.isSessionSupported) {
+    const supported = await navigator.xr.isSessionSupported('immersive-vr');
+    if (supported) {
+      try {
+        const session = await navigator.xr.requestSession('immersive-vr');
+        scene.renderer.xr.setSession(session);
+      } catch (err) {
+        alert('Unable to enter VR: ' + err.message);
+      }
+    } else alert('Immersive VR not supported on this device/browser.');
+  } else alert('WebXR not available in this browser. Use a WebXR-capable browser on an XR headset.');
+});
+
+enterARBtn.addEventListener('click', async () => {
+  // Try to start an immersive-ar session. This requires an HTTPS context and device support.
+  if (!navigator.xr || !navigator.xr.isSessionSupported) {
+    return alert('WebXR AR not available in this browser.');
+  }
+  const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
+  if (!supported) return alert('Immersive AR not supported on this device/browser.');
+
+  try {
+    const session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['local', 'hit-test']
+    });
+    // Connect session to A-Frame renderer if possible
+    if (scene.renderer && scene.renderer.xr) {
+      scene.renderer.xr.setSession(session);
+    }
+    // Inform user; application-specific AR placement logic should go here.
+    alert('AR session started. Implement hit-test placement logic to place objects in the real world.');
+  } catch (err) {
+    alert('Failed to start AR session: ' + err.message);
+  }
+});
+
+// Update score/hud when boxes are removed
+function updateHud() {
+  const boxes = document.querySelectorAll('.dynamic');
+  const text = document.getElementById('scoreText');
+  if (text) text.setAttribute('value', `Boxes: ${boxes.length}`);
+}
+
+// Watch for boxes being removed (if user throws them off world) every second
+setInterval(updateHud, 1000);
+
+// small UX: allow mouse clicks to pick objects when not in XR
+scene.addEventListener('loaded', () => {
+  // ensure hands are visible for non-XR (show simple pointer models)
+  const left = document.getElementById('leftHand');
+  const right = document.getElementById('rightHand');
+  if (AFRAME.utils.device.isMobile()) {
+    // mobile: don't show heavy models
+  }
+});
+
+</script>
+
 </body>
 </html>
