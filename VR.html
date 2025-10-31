@@ -5,7 +5,6 @@
     <title>VR Cube Catcher</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/handy-work@3.1.1/build/handy-controls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/handy-work@3.1.1/build/magnet-helpers.min.js"></script>
     <style>
         .score {
             position: absolute;
@@ -26,9 +25,8 @@
     <div class="score">Score: <span id="score">0</span></div>
     
     <a-scene 
-        vr-mode-ui="enabled: false"
-        renderer="antialias: true; colorManagement: true; sortObjects: true"
-        physics="debug: false; gravity: -9.8"
+        renderer="antialias: true; colorManagement: true"
+        physics="gravity: -9.8"
         handy-controls="materialOverride: false"
         cursor="rayOrigin: mouse"
         raycaster="objects: .cube">
@@ -36,8 +34,7 @@
         <!-- Camera with hands -->
         <a-entity id="cameraRig" position="0 1.6 0">
             <a-camera></a-camera>
-            <a-entity handy-controls="materialOverride: false" 
-                      handy-cursor="maxDistance: 10; objects: .cube"></a-entity>
+            <a-entity handy-controls="materialOverride: false"></a-entity>
         </a-entity>
 
         <!-- Environment -->
@@ -52,64 +49,43 @@
     </a-scene>
 
     <script>
-        // Game variables
         let score = 0;
         const scoreElement = document.getElementById('score');
         const scene = document.querySelector('a-scene');
-        const cameraRig = document.getElementById('cameraRig');
         
-        // Create falling cubes
         function createCube() {
             const cube = document.createElement('a-box');
             cube.classList.add('cube');
             
-            // Random position above player
+            // Random spawn position
             const x = (Math.random() - 0.5) * 8;
             const z = (Math.random() - 0.5) * 8;
-            cube.setAttribute('position', {x: x, y: 5, z: z});
+            cube.setAttribute('position', {x, y: 5, z});
             
-            // Physics properties
-            cube.setAttribute('dynamic-body', {
-                shape: 'box',
-                mass: 1
-            });
-            
-            // Visual properties
+            // Physics
+            cube.setAttribute('dynamic-body', {shape: 'box', mass: 1});
             cube.setAttribute('color', '#FF5722');
             cube.setAttribute('width', 0.3);
             cube.setAttribute('height', 0.3);
             cube.setAttribute('depth', 0.3);
             
-            // Collision handling
+            // Collision detection
             cube.addEventListener('body-collide', (e) => {
-                if (e.detail.body.el.classList.contains('hand')) {
-                    // Remove cube and update score
-                    cube.parentNode.removeChild(cube);
-                    score++;
-                    scoreElement.textContent = score;
+                if (e.detail.body.el?.hasAttribute('hand-controls')) {
+                    cube.remove();
+                    scoreElement.textContent = ++score;
                 }
             });
             
             scene.appendChild(cube);
             
-            // Remove cubes that fall too low
-            setTimeout(() => {
-                if (cube.parentNode) {
-                    cube.parentNode.removeChild(cube);
-                }
-            }, 10000);
+            // Auto-remove after 10s
+            setTimeout(() => cube.parentNode && cube.remove(), 10000);
         }
         
-        // Spawn cubes every 1.5 seconds
-        setInterval(createCube, 1500);
-        
-        // Add hand meshes
-        document.querySelector('a-scene').addEventListener('loaded', () => {
-            const hands = document.querySelectorAll('[hand]');
-            hands.forEach(hand => {
-                hand.setAttribute('hand-model', 'color', hand.id === 'left' ? '#3498db' : '#e74c3c');
-                hand.classList.add('hand');
-            });
+        // Start spawning cubes after scene loads
+        scene.addEventListener('loaded', () => {
+            setInterval(createCube, 1500);
         });
     </script>
 </body>
