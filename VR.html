@@ -2,287 +2,215 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Simple VR Game</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VR Visual Experience</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-event-set-component@3.0.3/dist/aframe-event-set-component.min.js"></script>
-    <script src="https://unpkg.com/aframe-look-at-billboard-component@0.1.1/dist/aframe-look-at-billboard-component.min.js"></script>
-    <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+    <script src="https://unpkg.com/aframe-particle-system-component@1.0.x/dist/aframe-particle-system-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-extras.ocean@%5E3.5.x/dist/aframe-extras.ocean.min.js"></script>
+    <script src="https://unpkg.com/aframe-gradient-sky@1.0.4/dist/gradientsky.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js"></script>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
         }
-        #ui-container {
-            position: absolute;
-            bottom: 20px;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            z-index: 1000;
-        }
-        .ui-button {
-            background: rgba(30, 30, 30, 0.7);
-            color: white;
-            border: 2px solid white;
-            border-radius: 10px;
-            padding: 12px 24px;
-            margin: 0 10px;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .ui-button:hover {
-            background: rgba(50, 50, 50, 0.9);
-            transform: scale(1.05);
-        }
-        #score-display {
+        #info-panel {
             position: absolute;
             top: 20px;
             left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 1000;
+            max-width: 300px;
+            backdrop-filter: blur(5px);
+        }
+        #info-panel h1 {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+        }
+        #info-panel p {
+            margin: 5px 0;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
             color: white;
             font-size: 24px;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px 15px;
-            border-radius: 10px;
         }
     </style>
 </head>
 <body>
-    <a-scene 
-        background="color: #1a1a2e" 
-        vr-mode-ui="enabled: true"
-        movement-controls="fly: true; speed: 0.5"
-        physics="driver: cannon; gravity: 0;"
-        renderer="antialias: true; colorManagement: true">
-
-        <!-- Player with hand controls -->
-        <a-entity id="player" 
-                  movement-controls 
-                  position="0 1.6 0">
-            <a-entity camera look-controls wasd-controls position="0 0 0"></a-entity>
-            
-            <!-- Left hand controller -->
-            <a-entity 
-                id="left-hand"
-                oculus-touch-controls="hand: left" 
-                vive-controls="hand: left"
-                windows-motion-controls="hand: left"
-                daydream-controls="hand: left"
-                gearvr-controls="hand: left"
-                hand-controls="hand: left"
-                laser-controls="hand: left">
-                <a-sphere 
-                    class="hand"
-                    radius="0.05" 
-                    color="#ff6b6b"
-                    position="0 0 0">
-                </a-sphere>
-            </a-entity>
-            
-            <!-- Right hand controller -->
-            <a-entity 
-                id="right-hand"
-                oculus-touch-controls="hand: right" 
-                vive-controls="hand: right"
-                windows-motion-controls="hand: right"
-                daydream-controls="hand: right"
-                gearvr-controls="hand: right"
-                hand-controls="hand: right"
-                laser-controls="hand: right">
-                <a-sphere 
-                    class="hand"
-                    radius="0.05" 
-                    color="#4ecdc4"
-                    position="0 0 0">
-                </a-sphere>
-            </a-entity>
-        </a-entity>
-
-        <!-- Environment -->
-        <a-entity id="environment">
-            <!-- Ground -->
-            <a-plane 
-                position="0 0 -4" 
-                rotation="-90 0 0" 
-                width="30" 
-                height="30" 
-                color="#16213e"
-                static-body>
-            </a-plane>
-            
-            <!-- Sky -->
-            <a-sky color="#0f3460"></a-sky>
-            
-            <!-- Floating objects to interact with -->
-            <a-entity id="objects-container">
-                <!-- These will be generated dynamically -->
-            </a-entity>
-            
-            <!-- Simple walls to create boundaries -->
-            <a-box position="0 2 -10" width="20" height="4" depth="0.5" color="#1a1a2e"></a-box>
-            <a-box position="-10 2 0" width="0.5" height="4" depth="20" color="#1a1a2e"></a-box>
-            <a-box position="10 2 0" width="0.5" height="4" depth="20" color="#1a1a2e"></a-box>
-            <a-box position="0 2 10" width="20" height="4" depth="0.5" color="#1a1a2e"></a-box>
-        </a-entity>
-
-        <!-- Lighting -->
-        <a-entity light="type: ambient; color: #444"></a-entity>
-        <a-entity light="type: directional; color: #fff; intensity: 0.5" position="-1 5 2"></a-entity>
-    </a-scene>
-
-    <!-- UI Elements -->
-    <div id="score-display">Score: <span id="score">0</span></div>
-    
-    <div id="ui-container">
-        <button class="ui-button" onclick="enterVR()">Enter VR</button>
-        <button class="ui-button" onclick="enterAR()">Enter AR</button>
+    <!-- Loading screen -->
+    <div id="loading">
+        <div>Loading VR Experience...</div>
     </div>
 
-    <script>
-        // Game variables
-        let score = 0;
-        const objects = [];
+    <!-- Information panel -->
+    <div id="info-panel">
+        <h1>VR Visual Experience</h1>
+        <p>Look around to explore the beautiful 3D environment.</p>
+        <p>Use the VR/AR button to enter immersive mode.</p>
+        <p>Move your head to look around. No interaction required.</p>
+    </div>
+
+    <!-- A-Frame Scene -->
+    <a-scene 
+        vr-mode-ui="enabled: true" 
+        background="color: #000011"
+        renderer="colorManagement: true;"
+        loading-screen="enabled: false">
+
+        <!-- Environment -->
+        <a-entity environment="preset: forest; dressingAmount: 500; groundColor: #445544; dressingColor: #445544"></a-entity>
         
-        // Initialize the game
-        document.addEventListener('DOMContentLoaded', function() {
-            generateObjects();
-            setupEventListeners();
+        <!-- Sky with gradient -->
+        <a-sky color="#001122"></a-sky>
+        
+        <!-- Floating geometric shapes -->
+        <a-entity id="floating-objects">
+            <!-- Central crystal -->
+            <a-entity id="main-crystal" geometry="primitive: octahedron; radius: 1.5" 
+                      material="color: #00AAFF; shader: standard; metalness: 0.3; roughness: 0.1"
+                      position="0 2 -5"
+                      animation="property: rotation; to: 0 360 0; loop: true; dur: 10000">
+            </a-entity>
+            
+            <!-- Orbiting spheres -->
+            <a-entity id="orbiting-sphere-1" geometry="primitive: sphere; radius: 0.5" 
+                      material="color: #FF3366; shader: standard; metalness: 0.5"
+                      position="3 2 -5"
+                      animation="property: rotation; to: 360 0 0; loop: true; dur: 8000">
+            </a-entity>
+            
+            <a-entity id="orbiting-sphere-2" geometry="primitive: sphere; radius: 0.5" 
+                      material="color: #33FF99; shader: standard; metalness: 0.5"
+                      position="-3 2 -5"
+                      animation="property: rotation; to: 0 360 0; loop: true; dur: 12000">
+            </a-entity>
+            
+            <!-- Floating torus -->
+            <a-entity id="floating-torus" geometry="primitive: torus; radius: 1; radiusTubular: 0.2" 
+                      material="color: #FFAA00; shader: standard; metalness: 0.7"
+                      position="0 4 -8"
+                      animation="property: rotation; to: 0 360 360; loop: true; dur: 15000">
+            </a-entity>
+            
+            <!-- Ring of small crystals -->
+            <a-entity id="crystal-ring">
+                <a-entity class="ring-crystal" geometry="primitive: tetrahedron; radius: 0.3" 
+                          material="color: #AA44FF; shader: standard; metalness: 0.4"
+                          position="5 3 -10"
+                          animation="property: rotation; to: 360 360 0; loop: true; dur: 20000">
+                </a-entity>
+                
+                <a-entity class="ring-crystal" geometry="primitive: tetrahedron; radius: 0.3" 
+                          material="color: #44AAFF; shader: standard; metalness: 0.4"
+                          position="-5 3 -10"
+                          animation="property: rotation; to: 0 360 360; loop: true; dur: 18000">
+                </a-entity>
+                
+                <a-entity class="ring-crystal" geometry="primitive: tetrahedron; radius: 0.3" 
+                          material="color: #FF44AA; shader: standard; metalness: 0.4"
+                          position="0 3 -15"
+                          animation="property: rotation; to: 360 0 360; loop: true; dur: 22000">
+                </a-entity>
+            </a-entity>
+        </a-entity>
+        
+        <!-- Particle systems -->
+        <a-entity particle-system="preset: snow; color: #88CCFF; particleCount: 1000"></a-entity>
+        <a-entity particle-system="preset: default; color: #FFFFFF, #FFAA00; particleCount: 500" 
+                  position="0 5 -10"></a-entity>
+        
+        <!-- Lights -->
+        <a-light type="ambient" color="#4455FF" intensity="0.3"></a-light>
+        <a-light type="directional" color="#FFFFFF" intensity="0.8" position="5 10 5"></a-light>
+        <a-light type="point" color="#00AAFF" intensity="0.5" position="0 3 -5" distance="10" decay="2"></a-light>
+        <a-light type="point" color="#FF3366" intensity="0.5" position="3 2 -5" distance="8" decay="2"></a-light>
+        <a-light type="point" color="#33FF99" intensity="0.5" position="-3 2 -5" distance="8" decay="2"></a-light>
+        
+        <!-- Player with hands -->
+        <a-entity id="player" movement-controls>
+            <a-entity camera look-controls position="0 1.6 0"></a-entity>
+            
+            <!-- Left hand -->
+            <a-entity id="left-hand" hand-controls="hand: left" 
+                      laser-controls="hand: left" 
+                      oculus-touch-controls="hand: left">
+                <a-sphere color="#FFFFFF" radius="0.05" position="0 0 0"></a-sphere>
+                <a-entity line="start: 0 0 0; end: 0 0 -0.3; color: white" visible="false"></a-entity>
+            </a-entity>
+            
+            <!-- Right hand -->
+            <a-entity id="right-hand" hand-controls="hand: right" 
+                      laser-controls="hand: right" 
+                      oculus-touch-controls="hand: right">
+                <a-sphere color="#FFFFFF" radius="0.05" position="0 0 0"></a-sphere>
+                <a-entity line="start: 0 0 0; end: 0 0 -0.3; color: white" visible="false"></a-entity>
+            </a-entity>
+        </a-entity>
+    </a-scene>
+
+    <script>
+        // Hide loading screen when scene is loaded
+        document.querySelector('a-scene').addEventListener('loaded', function() {
+            setTimeout(function() {
+                document.getElementById('loading').style.display = 'none';
+            }, 1000);
         });
         
-        // Generate floating objects to interact with
-        function generateObjects() {
-            const container = document.getElementById('objects-container');
-            const colors = ['#ff6b6b', '#4ecdc4', '#ffe66d', '#6a0572', '#1a936f'];
-            const shapes = ['sphere', 'box', 'cylinder', 'cone', 'octahedron'];
+        // Add more floating objects dynamically
+        window.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('floating-objects');
             
+            // Add more random floating objects
             for (let i = 0; i < 15; i++) {
-                const x = (Math.random() - 0.5) * 15;
-                const y = Math.random() * 3 + 1;
-                const z = (Math.random() - 0.5) * 15 - 4;
+                const x = (Math.random() - 0.5) * 30;
+                const y = Math.random() * 10 + 2;
+                const z = (Math.random() - 0.5) * 30 - 10;
                 
-                const color = colors[Math.floor(Math.random() * colors.length)];
-                const shape = shapes[Math.floor(Math.random() * shapes.length)];
+                const shape = document.createElement('a-entity');
+                const shapes = ['box', 'sphere', 'cylinder', 'cone', 'torus'];
+                const colors = ['#FF5555', '#55FF55', '#5555FF', '#FFFF55', '#FF55FF', '#55FFFF'];
                 
-                let object;
+                const shapeType = shapes[Math.floor(Math.random() * shapes.length)];
+                shape.setAttribute('geometry', `primitive: ${shapeType}`);
                 
-                switch(shape) {
-                    case 'sphere':
-                        object = document.createElement('a-sphere');
-                        object.setAttribute('radius', '0.5');
-                        break;
-                    case 'box':
-                        object = document.createElement('a-box');
-                        object.setAttribute('width', '1');
-                        object.setAttribute('height', '1');
-                        object.setAttribute('depth', '1');
-                        break;
-                    case 'cylinder':
-                        object = document.createElement('a-cylinder');
-                        object.setAttribute('radius', '0.5');
-                        object.setAttribute('height', '1');
-                        break;
-                    case 'cone':
-                        object = document.createElement('a-cone');
-                        object.setAttribute('radius-bottom', '0.5');
-                        object.setAttribute('radius-top', '0');
-                        object.setAttribute('height', '1');
-                        break;
-                    case 'octahedron':
-                        object = document.createElement('a-octahedron');
-                        object.setAttribute('radius', '0.5');
-                        break;
+                if (shapeType === 'box') {
+                    shape.setAttribute('geometry', 'width: 0.5; height: 0.5; depth: 0.5');
+                } else if (shapeType === 'sphere') {
+                    shape.setAttribute('geometry', 'radius: 0.3');
+                } else if (shapeType === 'cylinder') {
+                    shape.setAttribute('geometry', 'radius: 0.2; height: 0.8');
+                } else if (shapeType === 'cone') {
+                    shape.setAttribute('geometry', 'radiusBottom: 0.3; radiusTop: 0; height: 0.8');
+                } else if (shapeType === 'torus') {
+                    shape.setAttribute('geometry', 'radius: 0.5; radiusTubular: 0.1');
                 }
                 
-                object.setAttribute('position', `${x} ${y} ${z}`);
-                object.setAttribute('color', color);
-                object.setAttribute('class', 'interactable');
-                object.setAttribute('animation', `property: rotation; to: 0 360 0; loop: true; dur: ${5000 + Math.random() * 10000}`);
-                object.setAttribute('animation__2', `property: position; dir: alternate; dur: 2000; to: ${x} ${y + 1} ${z}; loop: true`);
+                shape.setAttribute('material', `color: ${colors[Math.floor(Math.random() * colors.length)]}; shader: standard; metalness: ${Math.random() * 0.8}; roughness: ${Math.random() * 0.5}`);
+                shape.setAttribute('position', `${x} ${y} ${z}`);
                 
-                // Add click/hover interaction
-                object.setAttribute('event-set__mouseenter', '_event: mouseenter; scale: 1.2 1.2 1.2');
-                object.setAttribute('event-set__mouseleave', '_event: mouseleave; scale: 1 1 1');
+                // Add floating animation
+                shape.setAttribute('animation', `property: position; to: ${x} ${y + 1} ${z}; dir: alternate; loop: true; dur: ${Math.random() * 5000 + 3000}`);
+                shape.setAttribute('animation__rotation', `property: rotation; to: ${Math.random() * 360} ${Math.random() * 360} ${Math.random() * 360}; loop: true; dur: ${Math.random() * 15000 + 5000}`);
                 
-                container.appendChild(object);
-                objects.push(object);
+                container.appendChild(shape);
             }
-        }
-        
-        // Set up event listeners for interactions
-        function setupEventListeners() {
-            const scene = document.querySelector('a-scene');
-            
-            // Handle controller interactions
-            scene.addEventListener('controllerconnected', function(evt) {
-                console.log('Controller connected:', evt.detail.name);
-            });
-            
-            // Handle grabbing objects
-            scene.addEventListener('gripdown', function(evt) {
-                const hand = evt.target;
-                const intersection = hand.components['laser-controls'].intersection;
-                
-                if (intersection && intersection.object.el.classList.contains('interactable')) {
-                    const object = intersection.object.el;
-                    object.setAttribute('animation', 'property: position; to: 0 0 0; dur: 200');
-                    object.setAttribute('animation__2', 'property: scale; to: 0.5 0.5 0.5; dur: 200');
-                    hand.appendChild(object);
-                    
-                    // Increase score when object is grabbed
-                    score += 10;
-                    document.getElementById('score').textContent = score;
-                }
-            });
-            
-            // Handle releasing objects
-            scene.addEventListener('gripup', function(evt) {
-                const hand = evt.target;
-                const object = hand.querySelector('.interactable');
-                
-                if (object) {
-                    hand.removeChild(object);
-                    
-                    // Add some physics to the thrown object
-                    const direction = new THREE.Vector3();
-                    hand.object3D.getWorldDirection(direction);
-                    
-                    object.setAttribute('position', '0 0 0');
-                    object.object3D.position.copy(hand.object3D.worldToLocal(
-                        hand.object3D.localToWorld(new THREE.Vector3(0, 0, 0)).add(direction.multiplyScalar(2))
-                    ));
-                    
-                    scene.appendChild(object);
-                    
-                    // Reset animations
-                    object.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 5000');
-                    object.setAttribute('animation__2', '');
-                    object.setAttribute('scale', '1 1 1');
-                }
-            });
-        }
-        
-        // Enter VR mode
-        function enterVR() {
-            const scene = document.querySelector('a-scene');
-            if (scene.hasAttribute('vr-mode')) {
-                scene.exitVR();
-            } else {
-                scene.enterVR();
-            }
-        }
-        
-        // Enter AR mode (if available)
-        function enterAR() {
-            const scene = document.querySelector('a-scene');
-            if (scene.hasAttribute('ar-mode')) {
-                scene.exitAR();
-            } else {
-                scene.enterAR();
-            }
-        }
+        });
     </script>
 </body>
 </html>
