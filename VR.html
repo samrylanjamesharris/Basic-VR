@@ -1,110 +1,216 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.1/dist/aframe-extras.min.js"></script>
-  </head>
-  <body>
-    <a-scene>
-      <!-- Player with hand controllers -->
-      <a-entity position="0 1.6 0" movement-controls="fly: true">
-        <a-camera></a-camera>
-        
-        <!-- Left Hand -->
-        <a-entity id="left-hand"
-                  hand-controls="hand: left"
-                  oculus-touch-controls="hand: left"
-                  vive-controls="hand: left"
-                  windows-motion-controls="hand: left">
-          <a-sphere radius="0.03" color="blue" position="0 0.05 0"></a-sphere>
-          <a-box width="0.04" height="0.08" depth="0.04" color="lightblue" position="0 -0.02 0"></a-box>
-        </a-entity>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple WebXR Hands - Grab & Toss</title>
+  <style>
+    html,body{height:100%;margin:0;background:#111;color:#ddd;font-family:system-ui,-apple-system,Segoe UI,Roboto}
+    #info{position:fixed;left:12px;top:12px;max-width:420px;background:rgba(0,0,0,0.45);backdrop-filter:blur(4px);padding:10px;border-radius:8px;font-size:13px}
+    #enterVR{position:fixed;right:12px;top:12px}
+    canvas{display:block}
+  </style>
+</head>
+<body>
+  <div id="info">
+    <strong>Simple WebXR hands — Grab & Toss</strong>
+    <p>Put on a WebXR-capable headset (Quest, Vision Pro, etc.). Use hand-tracking or controllers: pinch (thumb+index) to grab, release to toss. Press <em>Enter VR</em> to start.</p>
+    <ul>
+      <li>Grab cubes that float in front of you.</li>
+      <li>Score increases per thrown cube that hits the floor.</li>
+    </ul>
+    <p>If your browser or headset doesn't support WebXR you will still see a 3D preview and an error in the console.</p>
+  </div>
 
-        <!-- Right Hand -->
-        <a-entity id="right-hand"
-                  hand-controls="hand: right"
-                  oculus-touch-controls="hand: right"
-                  vive-controls="hand: right"
-                  windows-motion-controls="hand: right">
-          <a-sphere radius="0.03" color="red" position="0 0.05 0"></a-sphere>
-          <a-box width="0.04" height="0.08" depth="0.04" color="pink" position="0 -0.02 0"></a-box>
-        </a-entity>
-      </a-entity>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+    import { VRButton } from 'https://unpkg.com/three@0.152.2/examples/jsm/webxr/VRButton.js';
+    import { XRHandModelFactory } from 'https://unpkg.com/three@0.152.2/examples/jsm/webxr/XRHandModelFactory.js';
 
-      <!-- Grabbable Objects -->
-      <a-box id="box1" 
-             position="-1 1 -3" 
-             rotation="0 45 0" 
-             color="#4CC3D9" 
-             grabbable 
-             class="interactable">
-        <a-animation attribute="position" 
-                     to="1 1 -3" 
-                     direction="alternate" 
-                     dur="2000" 
-                     repeat="indefinite"></a-animation>
-      </a-box>
-      
-      <a-sphere id="sphere1" 
-                position="0 1.5 -4" 
-                radius="0.5" 
-                color="#EF2D5E" 
-                grabbable 
-                class="interactable"></a-sphere>
-      
-      <a-cylinder id="cylinder1" 
-                  position="1 1 -3" 
-                  radius="0.3" 
-                  height="1" 
-                  color="#FFC65D" 
-                  grabbable 
-                  class="interactable"></a-cylinder>
+    let camera, scene, renderer;
+    let score = 0;
+    const grabState = new Map(); // inputSource -> {object, offset}
 
-      <!-- Game Floor -->
-      <a-plane position="0 0 -4" rotation="-90 0 0" width="8" height="8" color="#7BC8A4" static-body></a-plane>
-      <a-sky color="#ECECEC"></a-sky>
-    </a-scene>
+    init();
+    function init(){
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x101218);
 
-    <script>
-      // Add physics and interaction systems
-      AFRAME.registerComponent('grabbable', {
-        init: function() {
-          this.el.setAttribute('dynamic-body', 'shape: box');
-          this.startPosition = new THREE.Vector3();
-          this.offset = new THREE.Vector3();
-          this.grabbed = false;
-          
-          this.handleGrab = this.handleGrab.bind(this);
-          this.handleRelease = this.handleRelease.bind(this);
-          
-          this.el.addEventListener('grab-start', this.handleGrab);
-          this.el.addEventListener('grab-end', this.handleRelease);
-        },
-        
-        handleGrab: function(evt) {
-          this.grabbed = true;
-          this.startPosition.copy(this.el.object3D.position);
-          const controller = evt.detail.hand.object3D;
-          this.offset.subVectors(this.startPosition, controller.position);
-        },
-        
-        handleRelease: function() {
-          this.grabbed = false;
-        },
-        
-        tick: function() {
-          if (this.grabbed) {
-            const controller = this.el.sceneEl.systems['tracked-controls'].controllers[0] || 
-                              this.el.sceneEl.systems['tracked-controls'].controllers[1];
-            if (controller && controller.pose.position) {
-              const pos = controller.pose.position;
-              this.el.object3D.position.set(pos.x + this.offset.x, 
-                                           pos.y + this.offset.y, 
-                                           pos.z + this.offset.z);
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 50);
+      camera.position.set(0,1.6,3);
+
+      renderer = new THREE.WebGLRenderer({antialias:true});
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      document.body.appendChild(VRButton.createButton(renderer));
+
+      // Lights
+      scene.add(new THREE.HemisphereLight(0x8080ff, 0x202020, 0.8));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+      dir.position.set(5,10,2);
+      scene.add(dir);
+
+      // Floor
+      const floorGeo = new THREE.PlaneGeometry(20,20);
+      const floorMat = new THREE.MeshStandardMaterial({color:0x222244, metalness:0.1, roughness:0.9});
+      const floor = new THREE.Mesh(floorGeo,floorMat);
+      floor.rotation.x = -Math.PI/2;
+      floor.position.y = 0;
+      scene.add(floor);
+
+      // Target area
+      const grid = new THREE.GridHelper(20,20,0x444488,0x101014);
+      grid.position.y = 0.001;
+      scene.add(grid);
+
+      // Floating cubes (interactables)
+      const boxGeo = new THREE.BoxGeometry(0.18,0.18,0.18);
+      for(let i=0;i<12;i++){
+        const mat = new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(Math.random(),0.7,0.5)});
+        const cube = new THREE.Mesh(boxGeo, mat);
+        cube.position.set((Math.random()-0.5)*2, 1 + Math.random()*0.8, -1 - Math.random()*1.2);
+        cube.userData.velocity = new THREE.Vector3((Math.random()-0.5)*0.01, (Math.random()-0.5)*0.01, (Math.random()-0.5)*0.01);
+        scene.add(cube);
+      }
+
+      // Controllers (for non-hand fallback and grips)
+      const controller1 = renderer.xr.getController(0);
+      controller1.addEventListener('selectstart', onSelectStart);
+      controller1.addEventListener('selectend', onSelectEnd);
+      scene.add(controller1);
+
+      const controller2 = renderer.xr.getController(1);
+      controller2.addEventListener('selectstart', onSelectStart);
+      controller2.addEventListener('selectend', onSelectEnd);
+      scene.add(controller2);
+
+      // Hand models + hand joint placeholders
+      const handModelFactory = new XRHandModelFactory();
+      for (let i = 0; i <= 1; i++) {
+        const hand = renderer.xr.getHand(i);
+        const model = handModelFactory.createHandModel(hand, 'mesh');
+        hand.add(model);
+        scene.add(hand);
+      }
+
+      window.addEventListener('resize', onWindowResize);
+      renderer.setAnimationLoop(animate);
+    }
+
+    function onWindowResize(){
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onSelectStart(ev){
+      // controller select acts like grab: raycast and attach first intersected cube
+      const controller = ev.target;
+      const tempMatrix = new THREE.Matrix4();
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+      const rayOrigin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+      const rayDir = new THREE.Vector3(0,0,-1).applyMatrix4(tempMatrix).normalize();
+
+      const raycaster = new THREE.Raycaster(rayOrigin, rayDir, 0, 2);
+      const intersects = raycaster.intersectObjects(scene.children, false).filter(i=>i.object.geometry && i.object.geometry.type==='BoxGeometry');
+      if(intersects.length>0){
+        const picked = intersects[0].object;
+        grabState.set(controller, {object:picked});
+      }
+    }
+
+    function onSelectEnd(ev){
+      const controller = ev.target;
+      const state = grabState.get(controller);
+      if(state && state.object){
+        // give a toss impulse based on controller movement (approx)
+        state.object.userData.velocity = new THREE.Vector3((Math.random()-0.5)*0.02, 0.05, (Math.random()-0.5)*0.02);
+        grabState.delete(controller);
+      }
+    }
+
+    // utility to detect pinch: distance between thumb-tip and index-finger-tip joints
+    function isPinching(hand){
+      try{
+        const thumb = hand.joints["thumb-tip"] || hand.joints[0x104];
+        const index = hand.joints["index-finger-tip"] || hand.joints[0x10A];
+        if(!thumb || !index) return false;
+        const tPos = new THREE.Vector3();
+        const iPos = new THREE.Vector3();
+        thumb.getWorldPosition(tPos);
+        index.getWorldPosition(iPos);
+        return tPos.distanceTo(iPos) < 0.04; // 4cm threshold
+      }catch(e){
+        return false;
+      }
+    }
+
+    function animate(){
+      // simple physics for cubes
+      scene.traverse(obj=>{
+        if(obj.geometry && obj.geometry.type==='BoxGeometry'){
+          // if grabbed by a hand/controller, skip physics
+          let grabbed = false;
+          for(const [k,v] of grabState.entries()){
+            if(v.object===obj) grabbed=true;
+          }
+          if(!grabbed){
+            // integrate
+            obj.position.add(obj.userData.velocity);
+            obj.userData.velocity.y -= 0.0015; // gravity
+            // floor collision
+            if(obj.position.y <= 0.09){
+              obj.position.y = 0.09;
+              obj.userData.velocity.set(0,0,0);
             }
+            // damp
+            obj.userData.velocity.multiplyScalar(0.995);
           }
         }
       });
-    </script>
-  </body>
+
+      // handle hands: detect pinch and attach/detach objects
+      for(let i=0;i<2;i++){
+        const hand = renderer.xr.getHand(i);
+        if(!hand) continue;
+        const inPinch = isPinching(hand);
+        const controllerKey = hand; // use hand object as key
+        if(inPinch && !grabState.has(controllerKey)){
+          // try to pick nearest cube within reach
+          const palmPos = new THREE.Vector3();
+          hand.getWorldPosition(palmPos);
+          let nearest=null; let nd=Infinity;
+          scene.traverse(obj=>{
+            if(obj.geometry && obj.geometry.type==='BoxGeometry'){
+              const d = obj.position.distanceTo(palmPos);
+              if(d<0.25 && d<nd){ nd=d; nearest=obj; }
+            }
+          });
+          if(nearest){ grabState.set(controllerKey, {object:nearest}); }
+        }
+        if(!inPinch && grabState.has(controllerKey)){
+          // release and apply a toss
+          const state = grabState.get(controllerKey);
+          state.object.userData.velocity = new THREE.Vector3((Math.random()-0.5)*0.02, 0.06, (Math.random()-0.5)*0.02);
+          grabState.delete(controllerKey);
+        }
+        // if holding, move object to hand
+        if(grabState.has(controllerKey)){
+          const state = grabState.get(controllerKey);
+          const target = new THREE.Vector3();
+          hand.getWorldPosition(target);
+          // smooth follow
+          state.object.position.lerp(target, 0.35);
+          state.object.userData.velocity.set(0,0,0);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+  </script>
+</body>
 </html>
