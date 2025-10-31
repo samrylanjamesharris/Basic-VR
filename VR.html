@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR VR Game with Hand Tracking</title>
+    <title>Simple VR Game for Meta Quest 1</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background: #0f1222;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
             color: white;
             height: 100vh;
             display: flex;
@@ -19,346 +19,290 @@
             justify-content: center;
         }
         
-        #container {
-            position: relative;
+        #gameContainer {
             width: 100%;
             height: 100%;
+            position: relative;
         }
         
-        #canvas {
+        #startButton {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 10;
             position: absolute;
-            top: 0;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        
+        #startButton:hover {
+            background-color: #0056b3;
+        }
+        
+        #uiContainer {
+            position: absolute;
+            top: 20px;
             left: 0;
             width: 100%;
-            height: 100%;
-            z-index: 1;
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
         }
         
-        #status {
+        #scoreDisplay {
+            font-size: 1.5em;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+        
+        #instructions {
             position: absolute;
             bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 1rem;
-            z-index: 10;
+            width: 100%;
+            text-align: center;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            font-size: 1.1em;
         }
         
-        .score-container {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 1.2rem;
-            z-index: 10;
-        }
-        
-        .instructions {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.6);
-            padding: 15px;
-            border-radius: 10px;
-            max-width: 300px;
-            z-index: 10;
-            font-size: 0.9rem;
+        .hidden {
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <div id="container">
-        <canvas id="canvas"></canvas>
-        
-        <div class="score-container">
-            Score: <span id="score">0</span>
+    <div id="gameContainer">
+        <button id="startButton">START VR GAME</button>
+        <div id="uiContainer">
+            <div id="scoreDisplay">Score: <span id="score">0</span></div>
         </div>
-        
-        <div class="instructions">
-            <p>Use your hands to grab and throw objects at the target to score points!</p>
+        <div id="instructions">
+            Put on your headset and grab the cube with your hands. Throw it at the targets!
         </div>
-        
-        <div id="status">Initializing WebXR...</div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/OBJLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/VRControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/dist/webxr-polyfill.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/three@0.144.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.144.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.144.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.144.0/examples/js/webxr/VRButton.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.144.0/examples/js/webxr/XRControllerModelFactory.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.144.0/examples/js/webxr/XRHandModelFactory.js"></script>
+
     <script>
-        // Initialize Three.js and WebXR
-        let scene, camera, renderer, controls;
-        let vrButton;
+        // Main variables
+        let scene, camera, renderer;
+        let controller1, controller2;
+        let hand1, hand2;
+        let cube, targets = [];
         let score = 0;
-        let gameObjects = [];
-        let handMeshes = [];
-        let target;
-        let raycaster;
-        let clock = new THREE.Clock();
+        let grabbedObject = null;
+        let previousHandPosition = new THREE.Vector3();
+        let velocity = new THREE.Vector3();
+        let gameActive = false;
         
-        // Initialize the scene
+        // Initialize the game
         function init() {
             // Create scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0f1222);
-            scene.fog = new THREE.Fog(0x0f1222, 10, 20);
+            scene.background = new THREE.Color(0x222266);
+            scene.fog = new THREE.Fog(0x222266, 5, 15);
             
             // Create camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 1.6, 3);
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 20);
             
             // Create renderer
-            renderer = new THREE.WebGLRenderer({ 
-                canvas: document.getElementById('canvas'),
-                antialias: true,
-                alpha: true
-            });
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.xr.enabled = true;
+            renderer.xr.setReferenceSpaceType('local');
+            document.getElementById('gameContainer').appendChild(renderer.domElement);
             
             // Add lighting
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
             
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(0, 10, 5);
+            directionalLight.position.set(5, 10, 7);
             directionalLight.castShadow = true;
             scene.add(directionalLight);
             
             // Create floor
-            const floorGeometry = new THREE.PlaneGeometry(20, 20);
+            const floorGeometry = new THREE.PlaneGeometry(10, 10);
             const floorMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x2a3b5c,
+                color: 0x336699,
                 roughness: 0.8,
                 metalness: 0.2
             });
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = -Math.PI / 2;
-            floor.position.y = -0.5;
+            floor.position.y = -1.5;
             floor.receiveShadow = true;
             scene.add(floor);
             
-            // Add grid helper
-            const gridHelper = new THREE.GridHelper(20, 20, 0x444466, 0x222244);
-            gridHelper.position.y = -0.49;
-            scene.add(gridHelper);
-            
-            // Create target
-            const targetGeometry = new THREE.CylinderGeometry(1.5, 1.5, 0.2, 32);
-            const targetMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0xff3366,
-                emissive: 0x880022,
-                roughness: 0.4,
-                metalness: 0.6
+            // Create cube to grab
+            const cubeGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const cubeMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xff3300,
+                roughness: 0.5,
+                metalness: 0.5
             });
-            target = new THREE.Mesh(targetGeometry, targetMaterial);
-            target.position.set(0, 0.5, -5);
-            target.rotation.x = Math.PI / 2;
-            scene.add(target);
+            cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            cube.position.set(0, 0, -1);
+            cube.castShadow = true;
+            cube.userData.isGrabbable = true;
+            scene.add(cube);
             
-            // Add target rings
-            for (let i = 0; i < 3; i++) {
-                const ringGeometry = new THREE.RingGeometry(1.2 + i*0.5, 1.4 + i*0.5, 32);
-                const ringMaterial = new THREE.MeshBasicMaterial({ 
-                    color: 0xff9966,
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0.7 - i*0.2
-                });
-                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-                ring.position.set(0, 0.51, -5);
-                ring.rotation.x = Math.PI / 2;
-                scene.add(ring);
-            }
+            // Create some targets
+            createTargets();
             
-            // Create some initial game objects
-            createGameObject();
-            createGameObject();
-            createGameObject();
+            // Setup controllers
+            setupControllers();
             
-            // Setup WebXR
-            setupWebXR();
+            // Add event listeners
+            document.getElementById('startButton').addEventListener('click', startGame);
             
             // Handle window resize
             window.addEventListener('resize', onWindowResize);
-            
-            // Start animation loop
-            animate();
         }
         
-        function createGameObject() {
-            const colors = [0xff6b6b, 0x4ecdc4, 0x1a936f, 0xffd166, 0x118ab2];
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            
-            const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-            const material = new THREE.MeshStandardMaterial({ 
-                color: color,
-                roughness: 0.3,
-                metalness: 0.7
-            });
-            
-            const cube = new THREE.Mesh(geometry, material);
-            
-            // Random position
-            cube.position.set(
-                (Math.random() - 0.5) * 4,
-                Math.random() * 2 + 0.5,
-                (Math.random() - 0.5) * 4 - 3
-            );
-            
-            cube.castShadow = true;
-            cube.receiveShadow = true;
-            
-            // Add physics properties
-            cube.userData = {
-                velocity: new THREE.Vector3(),
-                isGrabbed: false
-            };
-            
-            scene.add(cube);
-            gameObjects.push(cube);
-        }
-        
-        function setupWebXR() {
-            // Check for WebXR support
-            if ('xr' in navigator) {
-                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-                    if (supported) {
-                        document.getElementById('status').textContent = 'WebXR supported. Entering VR...';
-                        
-                        // Request a VR session immediately
-                        navigator.xr.requestSession('immersive-vr').then((session) => {
-                            renderer.xr.setSession(session);
-                            document.getElementById('status').textContent = 'VR session started. Use your hands to interact!';
-                        }).catch(err => {
-                            document.getElementById('status').textContent = 'Failed to start VR session: ' + err.message;
-                        });
-                        
-                        // Add event listener for session start
-                        renderer.xr.addEventListener('sessionstart', () => {
-                            document.getElementById('status').textContent = 'VR session started. Use your hands to interact!';
-                        });
-                        
-                        renderer.xr.addEventListener('sessionend', () => {
-                            document.getElementById('status').textContent = 'VR session ended.';
-                        });
-                    } else {
-                        document.getElementById('status').textContent = 'WebXR not supported in this browser.';
-                    }
-                });
-            } else {
-                document.getElementById('status').textContent = 'WebXR not supported in this browser.';
-            }
-            
-            // Setup controllers (for hand tracking)
-            const controllerModelFactory = new THREE.GLTFLoader();
-            
-            function onControllerConnected(controller) {
-                controller.addEventListener('connected', function (event) {
-                    if (event.data.targetRayMode === 'tracked-pointer' && event.data.hand) {
-                        // This is a hand tracking controller
-                        const handMesh = new THREE.Mesh(
-                            new THREE.BufferGeometry(),
-                            new THREE.MeshBasicMaterial({
-                                color: 0x00aaff,
-                                wireframe: true,
-                                transparent: true,
-                                opacity: 0.5
-                            })
-                        );
-                        
-                        handMesh.visible = true;
-                        scene.add(handMesh);
-                        handMeshes.push({ controller, mesh: handMesh });
-                        
-                        // Add event listener for grabbing
-                        controller.addEventListener('selectstart', function () {
-                            // Find the closest object to grab
-                            const controllerPosition = controller.position;
-                            let closestObject = null;
-                            let closestDistance = Infinity;
-                            
-                            for (const obj of gameObjects) {
-                                if (obj.userData.isGrabbed) continue;
-                                
-                                const distance = controllerPosition.distanceTo(obj.position);
-                                if (distance < closestDistance && distance < 0.5) {
-                                    closestDistance = distance;
-                                    closestObject = obj;
-                                }
-                            }
-                            
-                            if (closestObject) {
-                                closestObject.userData.isGrabbed = true;
-                                closestObject.userData.grabOffset = controllerPosition.clone().sub(closestObject.position);
-                            }
-                        });
-                        
-                        controller.addEventListener('selectend', function () {
-                            // Release grabbed objects
-                            for (const obj of gameObjects) {
-                                if (obj.userData.isGrabbed) {
-                                    obj.userData.isGrabbed = false;
-                                    obj.userData.velocity.copy(controller.userData.velocity || new THREE.Vector3());
-                                    
-                                    // Check if object hits the target
-                                    if (obj.position.distanceTo(target.position) < 2) {
-                                        score += 10;
-                                        document.getElementById('score').textContent = score;
-                                        createGameObject();
-                                    }
-                                }
-                            }
-                        });
-                    }
-                });
-                
-                controller.addEventListener('disconnected', function () {
-                    // Remove the hand mesh when controller is disconnected
-                    for (let i = 0; i < handMeshes.length; i++) {
-                        if (handMeshes[i].controller === controller) {
-                            scene.remove(handMeshes[i].mesh);
-                            handMeshes.splice(i, 1);
-                            break;
-                        }
-                    }
-                });
-            }
-            
-            // Add controllers
-            const controller1 = renderer.xr.getController(0);
-            controller1.addEventListener('connected', (e) => {
-                if (e.data.hand) {
-                    const handMesh = new THREE.Mesh(
-                        new THREE.BoxGeometry(0.05, 0.1, 0.05),
-                        new THREE.MeshBasicMaterial({ color: 0x00aaff, wireframe: true })
-                    );
-                    handMesh.visible = true;
-                    controller1.add(handMesh);
-                }
-            });
+        function setupControllers() {
+            // Controller 1 (Left hand)
+            controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('selectstart', () => grabObject(cube));
+            controller1.addEventListener('selectend', releaseObject);
             scene.add(controller1);
             
-            const controller2 = renderer.xr.getController(1);
-            controller2.addEventListener('connected', (e) => {
-                if (e.data.hand) {
-                    const handMesh = new THREE.Mesh(
-                        new THREE.BoxGeometry(0.05, 0.1, 0.05),
-                        new THREE.MeshBasicMaterial({ color: 0x00aaff, wireframe: true })
-                    );
-                    handMesh.visible = true;
-                    controller2.add(handMesh);
-                }
-            });
+            // Controller 2 (Right hand)
+            controller2 = renderer.xr.getController(1);
+            controller2.addEventListener('selectstart', () => grabObject(cube));
+            controller2.addEventListener('selectend', releaseObject);
             scene.add(controller2);
+            
+            // Hand models
+            const handModelFactory = new THREE.XRHandModelFactory()
+                .setPath('https://cdn.jsdelivr.net/npm/three@0.144.0/examples/models/fbx/hands/');
+                
+            hand1 = handModelFactory.createHandModel(controller1, 'mesh');
+            controller1.add(hand1);
+            
+            hand2 = handModelFactory.createHandModel(controller2, 'mesh');
+            controller2.add(hand2);
+        }
+        
+        function createTargets() {
+            // Create 5 targets at different positions
+            for (let i = 0; i < 5; i++) {
+                const targetGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16);
+                const targetMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x00ff00,
+                    roughness: 0.7,
+                    metalness: 0.3
+                });
+                const target = new THREE.Mesh(targetGeometry, targetMaterial);
+                
+                // Position targets randomly in front of the player
+                target.position.set(
+                    (Math.random() - 0.5) * 4,
+                    Math.random() * 2,
+                    -3 - Math.random() * 2
+                );
+                
+                target.rotation.x = Math.PI / 2; // Lay flat
+                target.castShadow = true;
+                target.userData.isTarget = true;
+                scene.add(target);
+                targets.push(target);
+            }
+        }
+        
+        function grabObject(object) {
+            if (!gameActive || !object.userData.isGrabbable) return;
+            
+            grabbedObject = object;
+            object.userData.isGrabbed = true;
+            
+            // Store the initial position of the hand
+            previousHandPosition.copy(controller1.position);
+        }
+        
+        function releaseObject() {
+            if (!grabbedObject) return;
+            
+            grabbedObject.userData.isGrabbed = false;
+            
+            // Calculate velocity based on hand movement
+            velocity.subVectors(controller1.position, previousHandPosition);
+            velocity.multiplyScalar(10); // Amplify the velocity
+            
+            // Apply velocity to the cube
+            grabbedObject.body.velocity.copy(velocity);
+            
+            grabbedObject = null;
+        }
+        
+        function checkCollisions() {
+            if (!cube || !cube.body) return;
+            
+            // Check if cube is colliding with any targets
+            for (let i = 0; i < targets.length; i++) {
+                const target = targets[i];
+                if (!target) continue;
+                
+                // Simple distance-based collision
+                const distance = cube.position.distanceTo(target.position);
+                if (distance < 0.4) { // Collision threshold
+                    // Remove the target
+                    scene.remove(target);
+                    targets.splice(i, 1);
+                    i--;
+                    
+                    // Increase score
+                    score += 10;
+                    document.getElementById('score').textContent = score;
+                    
+                    // Create a new target
+                    setTimeout(() => {
+                        const newTarget = new THREE.Mesh(
+                            new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16),
+                            new THREE.MeshStandardMaterial({ 
+                                color: 0x00ff00,
+                                roughness: 0.7,
+                                metalness: 0.3
+                            })
+                        );
+                        newTarget.position.set(
+                            (Math.random() - 0.5) * 4,
+                            Math.random() * 2,
+                            -3 - Math.random() * 2
+                        );
+                        newTarget.rotation.x = Math.PI / 2;
+                        newTarget.castShadow = true;
+                        newTarget.userData.isTarget = true;
+                        scene.add(newTarget);
+                        targets.push(newTarget);
+                    }, 1000);
+                }
+            }
+        }
+        
+        function startGame() {
+            document.getElementById('startButton').classList.add('hidden');
+            document.getElementById('instructions').classList.add('hidden');
+            
+            gameActive = true;
+            
+            // Start the XR session
+            renderer.xr.enabled = true;
+            document.body.appendChild(VRButton.createButton(renderer));
         }
         
         function onWindowResize() {
@@ -367,51 +311,38 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
         
+        // Animation loop
         function animate() {
-            requestAnimationFrame(animate);
-            
-            const delta = clock.getDelta();
-            
-            // Update grabbed objects
-            for (const obj of gameObjects) {
-                if (obj.userData.isGrabbed) {
-                    // Object follows controller
-                    const controller = obj.userData.controller;
-                    if (controller) {
-                        obj.position.copy(controller.position).sub(obj.userData.grabOffset);
-                        obj.quaternion.copy(controller.quaternion);
-                    }
-                } else {
-                    // Apply gravity and physics to released objects
-                    obj.userData.velocity.y -= 9.8 * delta; // gravity
-                    obj.position.add(obj.userData.velocity.clone().multiplyScalar(delta));
-                    
-                    // Bounce off the floor
-                    if (obj.position.y < -0.35) {
-                        obj.position.y = -0.35;
-                        obj.userData.velocity.y *= -0.7; // bounce
-                    }
-                    
-                    // Slow down velocity
-                    obj.userData.velocity.multiplyScalar(0.99);
-                }
+            renderer.setAnimationLoop(render);
+        }
+        
+        function render() {
+            if (grabbedObject) {
+                // Update the position of the grabbed object to match the controller
+                grabbedObject.position.copy(controller1.position);
+                
+                // Store the current hand position for velocity calculation
+                previousHandPosition.copy(controller1.position);
             }
             
-            // Update hand meshes
-            for (const hand of handMeshes) {
-                if (hand.controller.joints) {
-                    // Update hand mesh based on joint positions
-                    // In a real implementation, you would use the joint data to create a more detailed hand
-                    hand.mesh.position.copy(hand.controller.position);
-                    hand.mesh.quaternion.copy(hand.controller.quaternion);
-                }
+            // Update hand visibility based on XR session
+            if (renderer.xr.isPresenting) {
+                hand1.visible = true;
+                hand2.visible = true;
+            } else {
+                hand1.visible = false;
+                hand2.visible = false;
             }
+            
+            // Check for collisions
+            checkCollisions();
             
             renderer.render(scene, camera);
         }
         
-        // Start everything
+        // Initialize and start the game
         init();
+        animate();
     </script>
 </body>
 </html>
